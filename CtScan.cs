@@ -64,6 +64,8 @@ public class CtScan: Geometry
     public override Intersection GetIntersection(Line line, double minDist, double maxDist)
     {
         // TODO: ADD CODE HERE
+        // intersectionn = first not fully transparent (not empty) voxel
+        
         return Intersection.NONE;
     }
     
