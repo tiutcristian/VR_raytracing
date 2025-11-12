@@ -60,13 +60,108 @@ public class CtScan: Geometry
 
         return _data[z * _resolution[1] * _resolution[0] + y * _resolution[0] + x];
     }
+    
+    private static bool IntersectSlab(
+        double origin,
+        double direction,
+        double min,
+        double max,
+        ref double tMin,
+        ref double tMax)
+    {
+        const double eps = 1e-6;
+
+        if (Math.Abs(direction) < eps)
+        {
+            if (origin < min || origin > max)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        double invD = 1.0 / direction;
+        double t0 = (min - origin) * invD;
+        double t1 = (max - origin) * invD;
+
+        if (t0 > t1)
+        {
+            double tmp = t0;
+            t0 = t1;
+            t1 = tmp;
+        }
+
+        if (t0 > tMin) tMin = t0;
+        if (t1 < tMax) tMax = t1;
+
+        return tMin <= tMax;
+    }
 
     public override Intersection GetIntersection(Line line, double minDist, double maxDist)
     {
-        // TODO: ADD CODE HERE
-        // intersectionn = first not fully transparent (not empty) voxel
-        
-        return Intersection.NONE;
+        double minX = Math.Min(_v0.X, _v1.X);
+        double minY = Math.Min(_v0.Y, _v1.Y);
+        double minZ = Math.Min(_v0.Z, _v1.Z);
+        double maxX = Math.Max(_v0.X, _v1.X);
+        double maxY = Math.Max(_v0.Y, _v1.Y);
+        double maxZ = Math.Max(_v0.Z, _v1.Z);
+
+        Vector o = line.X0;
+        Vector d = line.Dx;
+
+        double tMin = minDist;
+        double tMax = maxDist;
+
+        if (!IntersectSlab(o.X, d.X, minX, maxX, ref tMin, ref tMax) ||
+            !IntersectSlab(o.Y, d.Y, minY, maxY, ref tMin, ref tMax) ||
+            !IntersectSlab(o.Z, d.Z, minZ, maxZ, ref tMin, ref tMax))
+        {
+            return Intersection.NONE;
+        }
+
+        if (tMax < minDist || tMin > maxDist)
+        {
+            return Intersection.NONE;
+        }
+
+        double startT = Math.Max(tMin, minDist);
+        double endT   = Math.Min(tMax, maxDist);
+
+        double voxelStep = Math.Min(_thickness[0], Math.Min(_thickness[1], _thickness[2])) * _scale;
+        if (voxelStep <= 0.0)
+        {
+            return Intersection.NONE;
+        }
+
+        Color color = Color.NONE;
+        double alpha = 1.0;
+        Vector normalAtPoint = new Vector();
+
+        for (double t = startT; t <= endT; t += voxelStep)
+        {
+            Vector p = line.CoordinateToPosition(t);
+            Color colorAtPoint = GetColor(p);
+            if (colorAtPoint.Alpha <= 0.0) continue;
+            normalAtPoint = GetNormal(p);
+            color += colorAtPoint * colorAtPoint.Alpha * alpha;
+            alpha *= 1.0 - colorAtPoint.Alpha;
+            if (alpha <= 0.01) break;
+        }
+        if (color.Alpha <= 0.0)
+        {
+            return Intersection.NONE;
+        }
+        return new Intersection
+        (
+            valid: true,
+            visible: true,
+            geometry: this,
+            line: line,
+            t: startT,
+            normal: normalAtPoint,
+            material: Material.FromColor(color),
+            color: color
+        );
     }
     
     private int[] GetIndexes(Vector v)
